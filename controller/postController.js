@@ -1,16 +1,21 @@
+require('dotenv').config();
 const postModel = require('../models').blogPost;
 const validator = require ('fastest-validator');
 const  fs  = require('fs');
+const cloudinary = require('../helper/cloudinary');
 //const path = require('path')
 
 const newPost = async(req,res)=> {
     try{
+        const result = await cloudinary.uploader.upload(req.file.path)
         const data={
             title:req.body.title,
             desc:req.body.desc,
             postImage:req.file.path,
             content:req.body.content,
-            commentId:req.body.commentId
+            commentId:req.body.commentId,
+            cloudUrl:result.secure_url,
+            cloudId:result.public_id
         }
 
         const postSchema ={
@@ -19,17 +24,19 @@ const newPost = async(req,res)=> {
             postImage: {type:'string',optional:true},
             content: {type:'string',optional:false},
             commentId: {type:'string',optional:false},
+            cloudUrl:{type:'string',optional:false},
+            cloudId:{type:'string',optional:false}
         }
         const v = new validator();
         const validatorResponse = v.validate(data,postSchema);
 
+        const createdPost = await postModel.create(data);
         if(validatorResponse !== true){
             return res.status(400).json({
                 message:'Validation Failed',
                 errors:validatorResponse[0].message
             })
         }else{
-            const createdPost = await postModel.create(data);
             res.status(201).json({
                 message:'New post was created.',
                 data: createdPost
@@ -88,7 +95,9 @@ const removePost = async(req,res) => {
     const post = await postModel.findAll({where:{id:id}})
     //remove upload from the uploaded file;
     await fs.unlinkSync(post[0].postImage);
+    await cloudinary.uploader.destroy(post[0].cloudId)
     await postModel.destroy({where:{id:id}})
+
     res.status(200).json({
         message:'Deleted successfully.'
     })
@@ -99,37 +108,46 @@ const removePost = async(req,res) => {
     }
 }
 
-const updatePost =async (req,res) => {
+const updatePost =async (request,res) => {
     try{
+        const id = request.params.id;
+    const post = await postModel.findAll({where:{id:id}})
+
+    const result = await cloudinary.uploader.upload(request.file.path)
         const postData = {
-            title:req.body.title,
-            desc: req.body.desc,
-            postImage: req.file.path,
-            content: req.body.content,
-            commentId:req.body.commentId
+            title:request.body.title,
+            desc: request.body.desc,
+            postImage: request.file.path,
+            content: request.body.content,
+            commentId:request.body.commentId,
+            cloudId:result.public_id,
+            cloudUrl:result.secure_url
+
         }
         
         const postSchema = {
-            title: {type: 'string', optional: false},
-            desc: {type: 'string', optional: false},
+            title: {type: 'string', optional: true},
+            desc: {type: 'string', optional: true},
             postImage: {type: 'string', optional: true},
-            content: {type: 'string', optional: false},
-            commentId: {type: 'string', optional: false}
+            content: {type: 'string', optional: true},
+            commentId: {type: 'string', optional: true},
+            cloudId:{type:'string',optional:true},
+            cloudUrl:{type:'string',optional:true}
     }
 
-    const v = new validator();
+    let v = new validator();
     const validatorResponse = v.validate(postData,postSchema)
-    const id = req.params.id;
-    const post = await postModel.findAll({where:{id:id}})
     if(validatorResponse !== true){
         return res.status(400).json({
             message:'validation failed',
             errors:validatorResponse[0].message
         })
     }else{
+        await cloudinary.uploader.destroy(post[0].cloudId)
         await fs.unlinkSync(post[0].postImage)
-        const updatedPost= await postModel.update(postData,{where:{id:id}})
-        res.status(200).json({
+        const updatedPost= await postModel.update(postData,{where:{id:id}},
+            {new:true})
+        res.status(201).json({
             message:'Post updated successfully.',
             data:updatedPost
         })

@@ -24,6 +24,12 @@ module.exports = {
       commentId: {
         type: Sequelize.INTEGER
       },
+      cloudUrl: {
+        type: Sequelize.STRING
+      },
+      cloudId: {
+        type: Sequelize.STRING
+      },
       createdAt: {
         allowNull: false,
         type: Sequelize.DATE
